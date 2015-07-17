@@ -35,13 +35,13 @@ public class Main {
         // add the analyzer and new term filter to mapping
         newIndex.updateMapping(ESVarNames.ANALYZER_PREFIX.getText() + MONGO_ID, 0.99, 0.01);
 
+        newIndex.closeClient();
+
         // initialize new documents
-        Document d1 = new Document(0, "docset1", "docid1", "This is plain text retrieved from Mongo.");
-        Document d2 = new Document(1, "docset2", "docid2", "VGhpcyBpcyBwZGYgdGV4dCByZXRyaWV2ZWQgZnJvbSBNb25nby4=");
+        //Document d1 = new Document(0, "docset1", "docid1", "This is plain text retrieved from Mongo.");
+        //Document d2 = new Document(1, "docset2", "docid2", "VGhpcyBpcyBwZGYgdGV4dCByZXRyaWV2ZWQgZnJvbSBNb25nby4=");
         // index the documents
-        d1.indexTo(newIndex.Config.getIndexName(), ESVarNames.INDEX_DOC_TYPE_NAME.getText());
-        d2.indexTo(newIndex.Config.getIndexName(), ESVarNames.INDEX_DOC_TYPE_NAME.getText());
-
-
+        //d1.indexTo(newIndex.Config.getIndexName(), ESVarNames.INDEX_DOC_TYPE_NAME.getText());
+        //d2.indexTo(newIndex.Config.getIndexName(), ESVarNames.INDEX_DOC_TYPE_NAME.getText());
     }
 }

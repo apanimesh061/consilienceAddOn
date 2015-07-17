@@ -6,11 +6,15 @@ package org.consilience.service;
 
 import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
 
+import java.io.File;
+import java.io.FilenameFilter;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.*;
 
 import org.consilience.helpers.ESKeywords;
 import org.consilience.helpers.ESVarNames;
+import org.consilience.indexer.Document;
 import org.consilience.service.setup.SetupService;
 import org.consilience.indexer.StartTCPService;
 import org.consilience.conf.IndexConfig;
@@ -25,7 +29,14 @@ import org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexResponse;
 import org.elasticsearch.action.admin.indices.mapping.put.PutMappingResponse;
 import org.elasticsearch.action.admin.indices.open.OpenIndexResponse;
+import org.elasticsearch.action.bulk.BulkProcessor;
+import org.elasticsearch.action.bulk.BulkRequest;
+import org.elasticsearch.action.bulk.BulkResponse;
+import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.client.Requests;
+import org.elasticsearch.common.unit.ByteSizeUnit;
+import org.elasticsearch.common.unit.ByteSizeValue;
+import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 
@@ -46,6 +57,8 @@ public class ImplementIndex implements SetupService {
         System.out.println("Loading the configuration for current index...");
         String indexName = generateIndexName(MongoID);
         SupportedLocale locale = SupportedLocale.ENGLISH;
+        //Config.setIndexName(indexName);
+        //Config.setSupportedLocale(locale);
         this.Config = new IndexConfig(indexName, locale);
         System.out.printf("Index name set to [%s] with locale as [%s] using text [%s]\n", indexName, locale.getLang(), locale.getText());
     }
@@ -330,12 +343,83 @@ public class ImplementIndex implements SetupService {
      * @throws Exception
      */
     public ImplementIndex(String MongOID) throws Exception {
-        this.setIndexConf(MongOID);
+        this.setIndexConf(MongOID); // initialises new conf for new ID
         if (!this.isIndexExists()) {
             this.initIndex();
             this.waitForYellowState();
             this.refreshServer();
         }
+    }
+
+    /**
+     *
+     */
+    public void closeClient() {
+        client.getClient().close();
+    }
+
+    /**
+     *
+     * @return
+     */
+    private BulkProcessor bulkIndexerInit() {
+        return BulkProcessor.builder(
+                client.getClient(),
+                new BulkProcessor.Listener() {
+                    public void beforeBulk(long executionID, BulkRequest request) {
+                        logger.info("Going to execute new bulk composed of {} actions", request.numberOfActions());
+                    }
+
+                    public void afterBulk(long executionID, BulkRequest request, BulkResponse response) {
+                        logger.info("Executed bulk composed of {} actions", request.numberOfActions());
+                    }
+
+                    public void afterBulk(long executionID, BulkRequest request, Throwable failure) {
+                        logger.warn("Error executing bulk", failure);
+                    }
+                })
+                .setBulkActions(20)
+                .setBulkSize(new ByteSizeValue(4, ByteSizeUnit.MB))
+                .setFlushInterval(TimeValue.timeValueSeconds(10))
+                .setConcurrentRequests(1)
+                .build();
+    }
+
+    /**
+     *
+     * @throws Exception
+     */
+    public void bulkIndexer() throws Exception {
+        File file  = new File("/home/cloudera/Downloads/bbc");
+        String[] dirs = file.list(new FilenameFilter() {
+            public boolean accept(File dir, String name) {
+                return new File(dir, name).isDirectory();
+            }
+        });
+
+        BulkProcessor bulkProcessor = bulkIndexerInit();
+
+        for (String dir : dirs) {
+            File currDir = new File("/home/cloudera/Downloads/bbc/" + dir);
+            File[] list = currDir.listFiles();
+
+            assert list != null;
+            for (File doc : list) {
+                byte[] encoded = Files.readAllBytes(new File(doc.getAbsolutePath()).toPath());
+                Document currDoc = new Document(0, currDir.getName(), doc.getName(), new String(encoded, "utf-8"));
+                currDoc.setJson();
+                bulkProcessor.add(
+                        new IndexRequest(
+                                Config.getIndexName(),
+                                ESVarNames.INDEX_DOC_TYPE_NAME.getText(),
+                                doc.getName()
+                        ).source(currDoc.getJson())
+                );
+                System.out.printf("Document [%s\\%s\\%s] was successfully indexed\n", Config.getIndexName(), ESVarNames.INDEX_DOC_TYPE_NAME.getText(), doc.getName());
+            }
+        }
+
+        bulkProcessor.close();
     }
 
     public static void main(String[] args) throws Exception {
@@ -356,6 +440,10 @@ public class ImplementIndex implements SetupService {
         );
 
         newIndex.updateMapping(ESVarNames.ANALYZER_PREFIX.getText() + MONGO_ID, 0.99, 0.01);
+
+        newIndex.bulkIndexer();
+
+        newIndex.refreshServer();
 
         //newIndex.deleteTemplate(ESVarNames.TEMPLATE_NAME.getText());
         //newIndex.deleteIndex(indexName);
