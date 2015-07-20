@@ -1,13 +1,13 @@
 <component name="libraryTable">
   <library name="Maven: org.apache.pdfbox:fontbox:2.0.0-SNAPSHOT">
     <CLASSES>
-      <root url="jar://$MAVEN_REPOSITORY$/org/apache/pdfbox/fontbox/2.0.0-SNAPSHOT/fontbox-2.0.0-20150717.110508-1607.jar!/" />
+      <root url="jar://$MAVEN_REPOSITORY$/org/apache/pdfbox/fontbox/2.0.0-SNAPSHOT/fontbox-2.0.0-20150719.175900-1616.jar!/" />
     </CLASSES>
     <JAVADOC>
-      <root url="jar://$MAVEN_REPOSITORY$/org/apache/pdfbox/fontbox/2.0.0-SNAPSHOT/fontbox-2.0.0-20150717.110508-1607-javadoc.jar!/" />
+      <root url="jar://$MAVEN_REPOSITORY$/org/apache/pdfbox/fontbox/2.0.0-SNAPSHOT/fontbox-2.0.0-20150719.175900-1616-javadoc.jar!/" />
     </JAVADOC>
     <SOURCES>
-      <root url="jar://$MAVEN_REPOSITORY$/org/apache/pdfbox/fontbox/2.0.0-SNAPSHOT/fontbox-2.0.0-20150717.110508-1607-sources.jar!/" />
+      <root url="jar://$MAVEN_REPOSITORY$/org/apache/pdfbox/fontbox/2.0.0-SNAPSHOT/fontbox-2.0.0-20150719.175900-1616-sources.jar!/" />
     </SOURCES>
   </library>
 </component>
