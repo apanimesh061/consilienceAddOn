@@ -1,8 +1,12 @@
 package org.consilience.service.termvectors;
 
 import com.google.gson.*;
+
 import org.consilience.helpers.ESVarNames;
 import org.consilience.indexer.StartTCPService;
+import org.consilience.persist.ToNGram;
+import org.consilience.persist.TermDataPojo;
+
 import org.elasticsearch.action.search.SearchRequestBuilder;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.action.search.SearchType;
@@ -15,13 +19,13 @@ import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.search.SearchHit;
+
+import org.mongodb.morphia.Datastore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Created by cloudera on 7/17/15.
@@ -30,6 +34,10 @@ public class TermVector {
     private static final Logger logger = LoggerFactory.getLogger(TermVector.class);
 
     private StartTCPService client = new StartTCPService();
+
+    private static long termCount = 0;
+
+    private static Map<String, List<Long>> vocabulary = new HashMap<>();
 
     private QueryBuilder Query() {
         return QueryBuilders.matchAllQuery();
@@ -43,13 +51,29 @@ public class TermVector {
                 .setSize(10);
         SearchResponse searchResponse = searchRequestBuilder.execute().actionGet();
 
+        Datastore datastore = ToNGram.getDataStore("ngrams");
+
         while(true) {
             searchResponse = client.getClient()
                     .prepareSearchScroll(searchResponse.getScrollId())
                     .setScroll(new TimeValue(60000)).execute().actionGet();
             for (SearchHit hit : searchResponse.getHits()) {
                 Map<String, Map<String, Long>> termVector = getTermVector(indexName, "document_set", hit.getId());
+                termVector.keySet().forEach(term -> {
+                    long termFreq = termVector.get(term).get("term_freq");
+                    List<Long> termData = Arrays.asList(termCount, termFreq);
+                    if (!vocabulary.containsKey(term)) {
+                        vocabulary.put(term, termData);
 
+                        TermDataPojo pojo = new TermDataPojo(term, termCount, termFreq);
+                        datastore.save(pojo);
+                        assert(pojo.equals(datastore.get(TermDataPojo.class, pojo.getId())));
+
+                        //System.out.printf("[%s]\t[%d]\t[%d]\n", term, termCount, termFreq);
+                    }
+                    termCount ++;
+                });
+                termVector.clear();
             }
             if (searchResponse.getHits().hits().length == 0)
                 break;
@@ -69,7 +93,7 @@ public class TermVector {
         builder.endObject();
         String Json = builder.prettyPrint().string();
 
-        Map<String, Map<String, Long>> termStatsMapping = new HashMap<String, Map<String, Long>>();
+        Map<String, Map<String, Long>> termStatsMapping = new HashMap<>();
 
         for (String s : termVectorResponse.getFields()) {
             JsonParser jsonParser = new JsonParser();
@@ -84,7 +108,7 @@ public class TermVector {
                 Gson gson = new GsonBuilder().create();
                 Term term = gson.fromJson(stringJsonElementEntry.getValue().getAsJsonObject(), Term.class);
 
-                Map<String, Long> currentTermStats = new HashMap<String, Long>();
+                Map<String, Long> currentTermStats = new HashMap<>();
                 currentTermStats.put("doc_freq", term.getDoc_freq());
                 currentTermStats.put("ttf", term.getTtf());
                 currentTermStats.put("term_freq", term.getTerm_freq());

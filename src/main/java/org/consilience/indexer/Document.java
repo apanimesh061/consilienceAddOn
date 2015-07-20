@@ -2,12 +2,8 @@ package org.consilience.indexer;
 
 import org.consilience.helpers.ESVarNames;
 
-import org.elasticsearch.action.bulk.BulkRequest;
-import org.elasticsearch.action.bulk.BulkResponse;
-import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.common.Base64;
-import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 
 import org.slf4j.Logger;
@@ -17,11 +13,6 @@ import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.Arrays;
-
-import org.elasticsearch.action.bulk.BulkProcessor;
-import org.elasticsearch.common.unit.ByteSizeUnit;
-import org.elasticsearch.common.unit.ByteSizeValue;
 
 import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
 

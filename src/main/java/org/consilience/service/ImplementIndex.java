@@ -435,7 +435,7 @@ public class ImplementIndex implements SetupService {
         newIndex.addAnalyzer(
                 ESVarNames.ANALYZER_PREFIX.getText() + MONGO_ID,
                 ESKeywords.CUSTOM.getText(),
-                ESKeywords.WHITESPACE.getText(),
+                ESKeywords.STANDARD.getText(),
                 filterList
         );
 
