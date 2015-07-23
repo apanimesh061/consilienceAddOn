@@ -7,7 +7,6 @@ package org.consilience.service;
 import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
 
 import java.io.File;
-import java.io.FilenameFilter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.*;
@@ -15,15 +14,15 @@ import java.util.*;
 import org.consilience.helpers.ESKeywords;
 import org.consilience.helpers.ESVarNames;
 import org.consilience.indexer.Document;
+import org.consilience.persist.pojos.DocumentPojo;
+import org.consilience.persist.DataStoreConnect;
 import org.consilience.service.setup.SetupService;
 import org.consilience.indexer.StartTCPService;
 import org.consilience.conf.IndexConfig;
 import org.consilience.conf.IndexConfig.SupportedLocale;
-
 import org.consilience.service.setup.templates.Template;
+
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthResponse;
-import org.elasticsearch.action.admin.indices.analyze.AnalyzeRequestBuilder;
-import org.elasticsearch.action.admin.indices.analyze.AnalyzeResponse;
 import org.elasticsearch.action.admin.indices.close.CloseIndexResponse;
 import org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexResponse;
@@ -37,9 +36,10 @@ import org.elasticsearch.client.Requests;
 import org.elasticsearch.common.unit.ByteSizeUnit;
 import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.unit.TimeValue;
-import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 
+import org.mongodb.morphia.Datastore;
+import org.mongodb.morphia.query.Query;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -139,11 +139,18 @@ public class ImplementIndex implements SetupService {
             xContentBuilder = jsonBuilder()
                 .startObject()
                     .startObject(ESKeywords.ANALYSIS.getText())
+//                        .startObject(ESKeywords.CHAR_FILTER.getText())
+//                            .startObject("apos_remove")
+//                                .field(ESKeywords.TYPE.getText(), ESKeywords.MAPPING.getText())
+//                                .field(ESKeywords.MAPPINGS.getText(), Arrays.asList("`t=>", "'t=>"))
+//                            .endObject()
+//                        .endObject()
                         .startObject(ESKeywords.ANALYZER.getText())
                             .startObject(analyzerName)
                                 .field(ESKeywords.TYPE.getText(), analyzerType)
                                 .field(ESKeywords.TOKENIZER.getText(), tokenizer)
                                 .field(ESKeywords.FILTER.getText(), filter)
+                                //.field(ESKeywords.CHAR_FILTER.getText(), Arrays.asList("apos_remove"))
                             .endObject()
                         .endObject()
                     .endObject()
@@ -298,47 +305,6 @@ public class ImplementIndex implements SetupService {
 
     /**
      *
-     * @param indexName
-     * @param analyzer
-     * @param tokenFilters
-     * @param text
-     * @return              tokens of analyzed text (Analyze API)
-     */
-    public List<String> analyzeText(String indexName, String analyzer, String[] tokenFilters, String text) {
-        List<String> tokens = new ArrayList<String>();
-        AnalyzeRequestBuilder analyzeRequestBuilder = client.getClient().admin().indices().prepareAnalyze(text);
-        if (indexName != null) {
-            analyzeRequestBuilder.setIndex(indexName);
-        }
-        if (analyzer != null) {
-            analyzeRequestBuilder.setAnalyzer(analyzer);
-        }
-        if (tokenFilters != null) {
-            analyzeRequestBuilder.setTokenFilters(tokenFilters);
-        }
-        logger.debug("Analyze request is text: {}, analyzer: {}, tokenfilters: {}",
-                analyzeRequestBuilder.request().text(),
-                analyzeRequestBuilder.request().analyzer(),
-                analyzeRequestBuilder.request().tokenFilters());
-
-        AnalyzeResponse analyzeResponse = analyzeRequestBuilder.get();
-        try {
-            if(analyzeResponse != null) {
-                logger.debug("Analyze response is : {}",
-                        analyzeResponse.toXContent(jsonBuilder().startObject(),
-                                ToXContent.EMPTY_PARAMS).prettyPrint().string());
-                for (AnalyzeResponse.AnalyzeToken analyzeToken : analyzeResponse.getTokens()) {
-                    tokens.add(analyzeToken.getTerm());
-                }
-            }
-        } catch (IOException e) {
-            logger.error("Error printing response.", e);
-        }
-        return tokens;
-    }
-
-    /**
-     *
      * @param MongOID
      * @throws Exception
      */
@@ -385,22 +351,43 @@ public class ImplementIndex implements SetupService {
                 .build();
     }
 
-    /**
-     *
-     * @throws Exception
-     */
-    public void bulkIndexer() throws Exception {
-        File file  = new File("/home/cloudera/Downloads/bbc");
-        String[] dirs = file.list(new FilenameFilter() {
-            public boolean accept(File dir, String name) {
-                return new File(dir, name).isDirectory();
-            }
-        });
+    public void bulkIndexFromMongo() throws IOException {
+        BulkProcessor bulkProcessor = bulkIndexerInit();
+        Datastore datastore = DataStoreConnect.getDataStore("documents");
+        Query query  = datastore.createQuery(DocumentPojo.class);
+        List<DocumentPojo> answers = query.asList();
+        answers.forEach(ans -> {
+                    Document currDoc = new Document(0, "doc_setID", ans.getDocid(), ans.getText());
+                    try {
+                        currDoc.setJson();
+                        bulkProcessor.add(
+                                new IndexRequest(
+                                        Config.getIndexName(),
+                                        ESVarNames.INDEX_DOC_TYPE_NAME.getText(),
+                                        ans.getDocid()
+                                ).source(currDoc.getJson())
+                        );
+                        System.out.printf("Document [%s\\%s\\%s] was successfully indexed\n",
+                                Config.getIndexName(),
+                                ESVarNames.INDEX_DOC_TYPE_NAME.getText(),
+                                ans.getDocid()
+                        );
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+        );
+        bulkProcessor.close();
+    }
+
+    public void bulkIndexer(String path) throws Exception {
+        File file  = new File(path);
+        String[] dirs = file.list((dir, name) -> new File(dir, name).isDirectory());
 
         BulkProcessor bulkProcessor = bulkIndexerInit();
 
         for (String dir : dirs) {
-            File currDir = new File("/home/cloudera/Downloads/bbc/" + dir);
+            File currDir = new File(path + dir);
             File[] list = currDir.listFiles();
 
             assert list != null;
@@ -415,22 +402,28 @@ public class ImplementIndex implements SetupService {
                                 doc.getName()
                         ).source(currDoc.getJson())
                 );
-                System.out.printf("Document [%s\\%s\\%s] was successfully indexed\n", Config.getIndexName(), ESVarNames.INDEX_DOC_TYPE_NAME.getText(), doc.getName());
+                System.out.printf("Document [%s\\%s\\%s] was successfully indexed\n",
+                        Config.getIndexName(),
+                        ESVarNames.INDEX_DOC_TYPE_NAME.getText(),
+                        doc.getName()
+                );
             }
         }
-
         bulkProcessor.close();
     }
 
     public static void main(String[] args) throws Exception {
-        String MONGO_ID = "37c8015d3777d422e7b637d93ce7567d";
+        String MONGO_ID = "5589b14f3004fb6be70e4724";
         ImplementIndex newIndex = new ImplementIndex(MONGO_ID);
-
-        List<String> filterList = Arrays.asList(
-                ESKeywords.LOWERCASE.getText(),
-                newIndex.Config.getStopWordFilterSmartName(),
-                newIndex.Config.getStemmerFilterName()
-        );
+;
+        ArrayList<String> filterList = new ArrayList<>();
+        filterList.add(ESKeywords.LOWERCASE.getText());
+        filterList.add(newIndex.Config.getStopWordFilterSmartName());
+        filterList.add(newIndex.Config.getStemmerFilterName());
+        //filterList.add(newIndex.Config.getWordDelimFilterName());
+        //filterList.add(newIndex.Config.getPresOrigFilterName());
+        //filterList.add(newIndex.Config.getAposSPatternReplaceFilterName());
+        //filterList.add(newIndex.Config.getAposTPatternReplaceFilterName());
 
         newIndex.addAnalyzer(
                 ESVarNames.ANALYZER_PREFIX.getText() + MONGO_ID,
@@ -441,7 +434,8 @@ public class ImplementIndex implements SetupService {
 
         newIndex.updateMapping(ESVarNames.ANALYZER_PREFIX.getText() + MONGO_ID, 0.99, 0.01);
 
-        newIndex.bulkIndexer();
+        //newIndex.bulkIndexer("/home/cloudera/Documents/bbc");
+        newIndex.bulkIndexFromMongo();
 
         newIndex.refreshServer();
 

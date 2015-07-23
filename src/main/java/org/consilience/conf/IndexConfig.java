@@ -61,6 +61,22 @@ public class IndexConfig {
         return "porter_stemmer_" + getSupportedLocale().getText();
     }
 
+    public String getWordDelimFilterName() {
+        return "word_delimiter_" + getSupportedLocale().getText();
+    }
+
+    public String getPresOrigFilterName() {
+        return "preserve_original_" + getSupportedLocale().getText();
+    }
+
+    public String getAposTPatternReplaceFilterName() {
+        return "pattern_replace_tT_" + getSupportedLocale().getText();
+    }
+
+    public String getAposSPatternReplaceFilterName() {
+        return "pattern_replace_sS_" + getSupportedLocale().getText();
+    }
+
     public String getStopWordFilterDefaultName() {
         return "default_stop_name_" + getSupportedLocale().getText();
     }

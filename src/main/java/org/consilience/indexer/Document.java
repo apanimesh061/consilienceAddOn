@@ -144,32 +144,7 @@ public class Document {
         }
     }
 
-    public static void main2(String[] args) throws Exception {
-        Document d1 = new Document(0, "docset1", "docid1", "This is plain text retrieved from Mongo.");
-        Document d2 = new Document(1, "docset2", "docid2", "VGhpcyBpcyBwZGYgdGV4dCByZXRyaWV2ZWQgZnJvbSBNb25nby4=");
-        d1.indexTo("classifier_37c8015d3777d422e7b637d93ce7567d", "document_set");
-        d2.indexTo("classifier_37c8015d3777d422e7b637d93ce7567d", "document_set");
-    }
+    public static void main(String[] args) {
 
-    public static void main1(String[] args) throws Exception {
-        //byte[] encoded = Files.readAllBytes(new File("/home/cloudera/Downloads/bbc/entertainment/386.txt").toPath());
-        //new Document(0, "docset1", "doc.txt", new String(encoded, "utf-8")).indexTo("classifier_37c8015d3777d422e7b637d93ce7567d", "document_set");
-
-        File file  = new File("/home/cloudera/Downloads/bbc");
-        String[] dirs = file.list(new FilenameFilter() {
-            public boolean accept(File dir, String name) {
-                return new File(dir, name).isDirectory();
-            }
-        });
-        for (String dir : dirs) {
-            File currDir = new File("/home/cloudera/Downloads/bbc/" + dir);
-            File[] list = currDir.listFiles();
-            assert list != null;
-            for (File doc : list) {
-                byte[] encoded = Files.readAllBytes(new File(doc.getAbsolutePath()).toPath());
-                new Document(0, currDir.getName(), doc.getName(), new String(encoded, "utf-8"))
-                        .indexTo("classifier_37c8015d3777d422e7b637d93ce7567d", "document_set");
-            }
-        }
     }
 }

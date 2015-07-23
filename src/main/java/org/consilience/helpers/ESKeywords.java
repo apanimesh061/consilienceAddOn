@@ -82,12 +82,14 @@ public enum ESKeywords {
     TERM_VECTOR("term_vector"),
     SETTINGS("settings"),
     MAPPINGS("mappings"),
+    MAPPING("mapping"),
     TEMPLATE("template"),
     WITH_POSITION_OFFSETS("with_positions_offsets"),
     FIELDDATA("fielddata"),
     FREQUENCY("frequency"),
     MIN_FREQUENCY("min"),
-    MAX_FREQUENCY("max")
+    MAX_FREQUENCY("max"),
+    STEM_ENGLISH_POSSESSIVE("stem_english_possessive")
     ;
 
     private String text;

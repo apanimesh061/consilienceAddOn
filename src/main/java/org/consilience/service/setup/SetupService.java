@@ -14,5 +14,4 @@ public interface SetupService {
     void updateIndexSettings(Map<String, Object> settings);
     void addAnalyzer(String analyzerName, String analyzerType, String tokenizer, List<String> filter);
     void refreshServer();
-    List<String> analyzeText(String indexAliasName, String analyzer, String[] tokenFilters, String text);
 }
