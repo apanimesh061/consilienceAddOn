@@ -7,6 +7,7 @@ package org.consilience.service;
 import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
 
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.*;
@@ -412,10 +413,79 @@ public class ImplementIndex implements SetupService {
         bulkProcessor.close();
     }
 
+    private boolean writeListToFile(List<String> wordList, String fileName) throws IOException {
+        FileWriter fileWriter = new FileWriter(ESVarNames.NEW_CONF_PATH.getText() + fileName);
+        wordList.forEach(
+                word -> {
+                    try {
+                        fileWriter.write(word + "\n");
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+        );
+        fileWriter.close();
+
+        return new File(ESVarNames.NEW_CONF_PATH.getText() + fileName).exists();
+    }
+
+    /**
+     *
+     * @param fileName
+     * @param analyzerName
+     * @param analyzerType
+     * @param tokenizer
+     * @param filter
+     */
+    public void addCustomStopWordFile(List<String> stopWords, String fileName, String analyzerName, String analyzerType, String tokenizer, ArrayList<String> filter) throws IOException {
+        if (writeListToFile(stopWords, fileName)) {
+
+            filter.add(Config.getStopWordFilterCustomName());
+            filter.add(Config.getPresOrigFilterName());
+            filter.add(Config.getStemmerFilterName());
+            filter.add("asciifolding");
+            filter.add(Config.getAposReplaceFilterName());
+
+            XContentBuilder xContentBuilder;
+            try {
+                xContentBuilder = jsonBuilder()
+                        .startObject()
+                        .startObject(ESKeywords.ANALYSIS.getText())
+                        .startObject(ESKeywords.FILTER.getText())
+                        .startObject(Config.getStopWordFilterCustomName())
+                        .field(ESKeywords.TYPE.getText(), ESKeywords.STOP.getText())
+                        .field(ESKeywords.STOPWORDS_PATH.getText(), fileName)
+                        .endObject()
+                        .endObject()
+                        .startObject(ESKeywords.ANALYZER.getText())
+                        .startObject(analyzerName)
+                        .field(ESKeywords.TYPE.getText(), analyzerType)
+                        .field(ESKeywords.TOKENIZER.getText(), tokenizer)
+                        .field(ESKeywords.FILTER.getText(), filter)
+                        .endObject()
+                        .endObject()
+                        .endObject()
+                        .endObject()
+                ;
+                String settings = xContentBuilder.prettyPrint().string();
+
+                closeIndex();
+                client.getClient().admin().indices().prepareUpdateSettings(Config.getIndexName()).setSettings(settings).get();
+                openIndex();
+                System.out.printf("[SUCCESS] Updating analyzer %s to %s/%s...\n", analyzerName, Config.getIndexName(), analyzerType);
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        } else {
+            System.out.println("List could not be copied to " + ESVarNames.NEW_CONF_PATH.getText());
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         String MONGO_ID = "5589b14f3004fb6be70e4724";
         ImplementIndex newIndex = new ImplementIndex(MONGO_ID);
-;
+
         ArrayList<String> filterList = new ArrayList<>();
         filterList.add(ESKeywords.LOWERCASE.getText());
         filterList.add(newIndex.Config.getStopWordFilterSmartName());
