@@ -69,12 +69,8 @@ public class IndexConfig {
         return "preserve_original_" + getSupportedLocale().getText();
     }
 
-    public String getAposTPatternReplaceFilterName() {
-        return "pattern_replace_tT_" + getSupportedLocale().getText();
-    }
-
-    public String getAposSPatternReplaceFilterName() {
-        return "pattern_replace_sS_" + getSupportedLocale().getText();
+    public String getAposReplaceFilterName() {
+        return "apos_replace_" + getSupportedLocale().getText();
     }
 
     public String getStopWordFilterDefaultName() {

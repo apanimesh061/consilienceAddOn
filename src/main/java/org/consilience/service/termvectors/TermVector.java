@@ -8,6 +8,7 @@ import com.google.gson.*;
 
 import org.bson.types.ObjectId;
 
+import org.consilience.helpers.ESKeywords;
 import org.consilience.helpers.ESVarNames;
 import org.consilience.helpers.Tuple2;
 import org.consilience.indexer.StartTCPService;
@@ -29,6 +30,7 @@ import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.search.SearchHit;
 
+import org.elasticsearch.search.SearchHitField;
 import org.mongodb.morphia.Datastore;
 
 import org.slf4j.Logger;
@@ -39,6 +41,61 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
+
+class SearchResult {
+    private String docID;
+    private String docSetID;
+    private String textSource;
+    private String text;
+
+    public String getDocID() {
+        return docID;
+    }
+
+    public void setDocID(String docID) {
+        this.docID = docID;
+    }
+
+    public String getDocSetID() {
+        return docSetID;
+    }
+
+    public void setDocSetID(String docSetID) {
+        this.docSetID = docSetID;
+    }
+
+    public String getTextSource() {
+        return textSource;
+    }
+
+    public void setTextSource(String textSource) {
+        this.textSource = textSource;
+    }
+
+    public String getText() {
+        return text;
+    }
+
+    public void setText(String text) {
+        this.text = text;
+    }
+
+    public SearchResult(String docID, String docSetID, String textSource, String text) {
+        this.docID = docID;
+        this.docSetID = docSetID;
+        this.textSource = textSource;
+        this.text = text;
+    }
+
+    public SearchResult() {}
+
+    public void display() {
+        System.out.println(this.docID);
+        System.out.println(this.docSetID);
+        System.out.println(this.textSource);
+        System.out.println(this.text);
+    }
+}
 
 class TokenPositions {
     private long position;
@@ -144,64 +201,66 @@ public class TermVector {
                 stem,
                 ESVarNames.PLAIN_TEXT.getText(),
                 ESVarNames.PDF_TEXT.getText()
+        ).analyzer(ESKeywords.KEYWORD.getText());
+    }
+
+    private Map<String, Integer> updateUnStemmedTerms(SearchResult searchResult, List<Tuple2<Integer, Integer>> offsets, Map<String, Integer> unstemmed) {
+        offsets.forEach(
+                offset -> {
+                    String offsetSubString = searchResult.getText().substring(offset._0, offset._1);
+                    Integer count = unstemmed.get(offsetSubString);
+                    unstemmed.put(offsetSubString, (count == null) ? 1 : count + 1);
+                }
         );
+        return unstemmed;
     }
 
     private Map<String, Integer> processSearchResults(
-                Map<String, Integer> unstemmed,
+                Map<String, Integer> unStemmed,
                 SearchResponse searchResponse,
                 String indexName,
                 String stem) throws IOException {
 
         for (SearchHit hit : searchResponse.getHits()) {
-            Map<String, Object> fullResult = hit.getSource();
-            //System.out.println(stem + " " + fullResult.get("doc_id"));
-            Map<String, Map<String, Object>> termVector =
-                    getTermVector(indexName, ESVarNames.INDEX_DOC_TYPE_NAME.getText(), (String) fullResult.get(ESVarNames.DOC_ID.getText()));
+            Map<String, Object> metaResult = hit.getSource();
+            Map<String, SearchHitField> textResult = hit.getFields();
+            SearchResult searchResult = new SearchResult();
+            textResult.keySet().forEach(
+                    t -> {
+                        searchResult.setTextSource(t);
+                        searchResult.setText(textResult.get(t).value().toString());
+                    }
+            );
+            searchResult.setDocID((String)metaResult.get(ESVarNames.DOC_ID.getText()));
+            searchResult.setDocSetID((String)metaResult.get(ESVarNames.DOCSET_ID.getText()));
 
-            try {
-                List<Tuple2<Integer, Integer>> offsets = (List<Tuple2<Integer, Integer>>) termVector.get(stem).get("tokens");
-                if (fullResult.containsKey(ESVarNames.PLAIN_TEXT.getText())) {
-                    String currentText = (String) fullResult.get(ESVarNames.PLAIN_TEXT.getText());
-                    offsets.forEach(
-                            t -> {
-                                String currentUnstemmedTerm = currentText.substring(t._0, t._1);
-                                Integer count = unstemmed.get(currentUnstemmedTerm);
-                                unstemmed.put(currentUnstemmedTerm, (count == null) ? 1 : count + 1);
-                            }
-                    );
-                } else {
-                    String currentText = (String) fullResult.get(ESVarNames.PDF_TEXT.getText());
-                    offsets.forEach(
-                            t -> {
-                                String currentUnstemmedTerm = currentText.substring(t._0, t._1);
-                                Integer count = unstemmed.get(currentUnstemmedTerm);
-                                unstemmed.put(
-                                        currentUnstemmedTerm,
-                                        (count == null) ? 1 : count + 1
-                                );
-                            }
-                    );
-                }
-                return unstemmed;
-            } catch (NullPointerException ex) {
-                System.out.println("Not found in term-vector : " + stem);
-            }
+            Map<String, Map<String, Object>> termVector =
+                    getTermVector(indexName, ESVarNames.INDEX_DOC_TYPE_NAME.getText(), searchResult.getDocID());
+
+            List<Tuple2<Integer, Integer>> offsets = (List<Tuple2<Integer, Integer>>) termVector.get(stem).get("tokens");
+
+            unStemmed = updateUnStemmedTerms(searchResult, offsets, unStemmed);
         }
-        return unstemmed;
+        return unStemmed;
     }
 
-    public Tuple2<Set<String>, String> getUnstemmedTerms(String indexName, String stem) throws IOException {
-        Map<String, Integer> unstemmed = new HashMap<>();
+    public Tuple2<Set<String>, String> getUnStemmedTerms(String indexName, String stem) throws IOException {
+        Map<String, Integer> unStemmed = new HashMap<>();
         SearchRequestBuilder searchRequestBuilder = client.getClient().prepareSearch(indexName)
                 .setSearchType(SearchType.SCAN)
                 .setScroll(new TimeValue(60000))
                 .setQuery(QueryStem(stem))
+                .setFetchSource(new String[]{ESVarNames.DOCSET_ID.getText(), ESVarNames.DOC_ID.getText()}, null)
+                .addFields(ESVarNames.PLAIN_TEXT.getText(), ESVarNames.PDF_TEXT.getText())
+                .setHighlighterPostTags("</em>")
+                .setHighlighterPreTags("<em>")
+                .addHighlightedField(ESVarNames.PLAIN_TEXT.getText(), 20, 150)
+                .addHighlightedField(ESVarNames.PDF_TEXT.getText(), 20, 150)
                 .setFrom(1)
                 .setSize(1);
-        SearchResponse searchResponse = searchRequestBuilder.execute().actionGet();
 
-        unstemmed = processSearchResults(unstemmed, searchResponse, indexName, stem);
+        SearchResponse searchResponse = searchRequestBuilder.execute().actionGet();
+        unStemmed = processSearchResults(unStemmed, searchResponse, indexName, stem);
 
         while(true) {
             searchResponse = client.getClient()
@@ -209,20 +268,19 @@ public class TermVector {
                     .setScroll(new TimeValue(60000))
                     .execute()
                     .actionGet();
-
-            unstemmed = processSearchResults(unstemmed, searchResponse, indexName, stem);
+            unStemmed = processSearchResults(unStemmed, searchResponse, indexName, stem);
 
             if (searchResponse.getHits().hits().length == 0)
                 break;
         }
         try {
-            String text = Collections.max(unstemmed.entrySet(), (entry1, entry2) -> entry1.getValue() > entry2.getValue() ? 1 : -1).getKey();
-            //System.out.println(text + " " + unstemmed.keySet().toString());
-            return new Tuple2<>(unstemmed.keySet(), text);
+            String text = Collections.max(unStemmed.entrySet(), (entry1, entry2) -> entry1.getValue() > entry2.getValue() ? 1 : -1).getKey();
+            return new Tuple2<>(unStemmed.keySet(), text);
         } catch (NoSuchElementException ex) {
             System.out.println("------------------------------------------ " + stem);
-            Set<String> h = new HashSet<>(Arrays.asList(stem));
-            return new Tuple2<>(h, stem);
+            //Set<String> h = new HashSet<>(Arrays.asList(stem));
+            //return new Tuple2<>(h, stem);
+            return null;
         }
     }
 
@@ -252,21 +310,24 @@ public class TermVector {
 
             for (Map.Entry<String, JsonElement> stringJsonElementEntry : entrySet) {
                 Gson gson = new GsonBuilder().create();
-                Term term = gson.fromJson(stringJsonElementEntry.getValue().getAsJsonObject(), Term.class);
+                String currentStemmedToken = stringJsonElementEntry.getKey();
+                if (!currentStemmedToken.equalsIgnoreCase("")) {
+                    Term term = gson.fromJson(stringJsonElementEntry.getValue().getAsJsonObject(), Term.class);
 
-                List<Tuple2<Integer, Integer>> offsets = new ArrayList<>();
+                    List<Tuple2<Integer, Integer>> offsets = new ArrayList<>();
 
-                term.getTokens().forEach(position ->
-                                offsets.add(new Tuple2<>(position.getStart_offset(), position.getEnd_offset()))
-                );
+                    term.getTokens().forEach(position ->
+                                    offsets.add(new Tuple2<>(position.getStart_offset(), position.getEnd_offset()))
+                    );
 
-                Map<String, Object> currentTermStats = new HashMap<>();
-                currentTermStats.put("doc_freq", term.getDoc_freq());
-                currentTermStats.put("ttf", term.getTtf());
-                currentTermStats.put("term_freq", term.getTerm_freq());
-                currentTermStats.put("tokens", offsets);
+                    Map<String, Object> currentTermStats = new HashMap<>();
+                    currentTermStats.put("doc_freq", term.getDoc_freq());
+                    currentTermStats.put("ttf", term.getTtf());
+                    currentTermStats.put("term_freq", term.getTerm_freq());
+                    currentTermStats.put("tokens", offsets);
 
-                termStatsMapping.put(stringJsonElementEntry.getKey(), currentTermStats);
+                    termStatsMapping.put(currentStemmedToken, currentTermStats);
+                }
             }
         }
         return termStatsMapping;
@@ -291,22 +352,24 @@ public class TermVector {
                     .actionGet();
             for (SearchHit hit : searchResponse.getHits()) {
                 Map<String, Map<String, Object>> termVector = getTermVector(indexName, ESVarNames.INDEX_DOC_TYPE_NAME.getText(), hit.getId());
-                termVector.keySet().forEach(term -> {
+                // add filter for term ending with //u0027 //u2019
+                for(String term : termVector.keySet()) {
                     Long termFreq = (Long) termVector.get(term).get("ttf");
                     List<Long> termData = Arrays.asList(termCount, termFreq);
                     if (!vocabulary.containsKey(term)) {
                         vocabulary.put(term, termData);
                         try {
-                            Tuple2<Set<String>, String> importantUnstemmedTerms = getUnstemmedTerms(indexName, term);
-                            Set<String> unstemmedTerms = importantUnstemmedTerms._0;
-                            String unstemmedMaxFreq = importantUnstemmedTerms._1;
+                            Tuple2<Set<String>, String> importantUnStemmedTerms = getUnStemmedTerms(indexName, term);
+                            if (importantUnStemmedTerms == null) continue;
+                            Set<String> unStemmedTerms = importantUnStemmedTerms._0;
+                            String unStemmedMaxFreq = importantUnStemmedTerms._1;
                             TermDataPojo pojo = new TermDataPojo(
                                     new ObjectId(ClassifierID),
                                     termCount,
-                                    unstemmedMaxFreq,
+                                    unStemmedMaxFreq,
                                     termFreq,
                                     term,
-                                    unstemmedTerms
+                                    unStemmedTerms
                             );
 //                            System.out.printf("%s\t%d\t%s\t%d\t%s\t%s\n",
 //                                    new ObjectId(ClassifierID),
@@ -319,14 +382,14 @@ public class TermVector {
                             datastore.save(pojo);
                             assert(pojo.equals(datastore.get(TermDataPojo.class, pojo.getId())));
 
-                            System.out.printf("Term [%s] added to the ngram collection successfully...\n", term);
+                            System.out.printf("Term [%s] added to the ngram collection successfully with [%s]\n", term, unStemmedTerms);
 
                         } catch (IOException e) {
                             e.printStackTrace();
                         }
+                        termCount ++;
                     }
-                    termCount ++;
-                });
+                }
                 termVector.clear();
             }
             if (searchResponse.getHits().hits().length == 0)

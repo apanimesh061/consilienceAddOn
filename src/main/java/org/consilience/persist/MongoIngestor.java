@@ -5,25 +5,37 @@ package org.consilience.persist;
  */
 
 import org.consilience.persist.pojos.DocumentPojo;
+
 import org.mongodb.morphia.Datastore;
+
+//import org.elasticsearch.common.Base64;
+import java.util.Base64;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 
 public class MongoIngestor {
+    private static int docIndex = 0;
+
     public void init(String pathToFiles) throws IOException {
         File currDir = new File(pathToFiles);
         File[] list = currDir.listFiles();
 
-        int docIndex = 0;
-
-        Datastore datastore = DataStoreConnect.getDataStore("documents");
+        Datastore datastore = DataStoreConnect.document_datastore;
 
         assert list != null;
         for (File doc : list) {
-            byte[] encoded = Files.readAllBytes(new File(doc.getAbsolutePath()).toPath());
-            DocumentPojo documentPojo = new DocumentPojo(docIndex, doc.getName(), new String(encoded, "utf-8"));
+            Path filePath = new File(doc.getAbsolutePath()).toPath();
+            String mimeType = Files.probeContentType(filePath);
+
+            byte[] source = Files.readAllBytes(filePath);
+
+            final String content = (mimeType.equalsIgnoreCase("text/plain")) ? new String(source, "utf-8") : new String(Base64.getEncoder().encode(source), "utf-8");
+            final Integer docType = (mimeType.equalsIgnoreCase("text/plain")) ? 0 : 1;
+
+            DocumentPojo documentPojo = new DocumentPojo(docType, "document_set_id" , doc.getName(), docIndex, content);
             datastore.save(documentPojo);
             assert(documentPojo.equals(datastore.get(DocumentPojo.class, documentPojo.getId())));
 
@@ -31,5 +43,11 @@ public class MongoIngestor {
 
             docIndex ++;
         }
+    }
+
+    public static void main(String[] args) throws IOException {
+        MongoIngestor ingestor = new MongoIngestor();
+        ingestor.init("/home/cloudera/Documents/bbc/entertainment");
+        ingestor.init("/home/cloudera/Documents/bbc/pdf_ent");
     }
 }

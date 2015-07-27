@@ -353,11 +353,11 @@ public class ImplementIndex implements SetupService {
 
     public void bulkIndexFromMongo() throws IOException {
         BulkProcessor bulkProcessor = bulkIndexerInit();
-        Datastore datastore = DataStoreConnect.getDataStore("documents");
-        Query query  = datastore.createQuery(DocumentPojo.class);
+        Datastore datastore = DataStoreConnect.document_datastore;
+        final Query query  = datastore.createQuery(DocumentPojo.class);
         List<DocumentPojo> answers = query.asList();
         answers.forEach(ans -> {
-                    Document currDoc = new Document(0, "doc_setID", ans.getDocid(), ans.getText());
+                    Document currDoc = new Document(ans.getDocumentType(), ans.getDocumentSetId(), ans.getDocid(), ans.getText());
                     try {
                         currDoc.setJson();
                         bulkProcessor.add(
@@ -419,11 +419,9 @@ public class ImplementIndex implements SetupService {
         ArrayList<String> filterList = new ArrayList<>();
         filterList.add(ESKeywords.LOWERCASE.getText());
         filterList.add(newIndex.Config.getStopWordFilterSmartName());
+        filterList.add(newIndex.Config.getPresOrigFilterName());
         filterList.add(newIndex.Config.getStemmerFilterName());
-        //filterList.add(newIndex.Config.getWordDelimFilterName());
-        //filterList.add(newIndex.Config.getPresOrigFilterName());
-        //filterList.add(newIndex.Config.getAposSPatternReplaceFilterName());
-        //filterList.add(newIndex.Config.getAposTPatternReplaceFilterName());
+        filterList.add(newIndex.Config.getAposReplaceFilterName());
 
         newIndex.addAnalyzer(
                 ESVarNames.ANALYZER_PREFIX.getText() + MONGO_ID,
