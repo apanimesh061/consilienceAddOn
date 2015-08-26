@@ -23,6 +23,6 @@ Settings are the list of pre-processings that are applied on a given index. In C
 
     |                  | TO                        | FROM              |
  ----------------- | ---------------------------- | ------------------
-| Single backticks | `'Isn't this fun?'`            | 'Isn't this fun?' |
-| Quotes           | `"Isn't this fun?"`            | "Isn't this fun?" |
+| Single backticks | `'Isn't this fun?'`            | ‘Isn’t this fun?’ |
+| Quotes           | `"Isn't this fun?"`            | “Isn’t this fun?” |
     You can see that under TO the quotes have been normalized. These characters are easily handled by `standard` tokenizer.
